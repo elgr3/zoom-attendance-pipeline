@@ -1,0 +1,7 @@
+# Dépendances Cloud Function (Python 3.11+)
+functions-framework==3.*   # runtime HTTP GCF (fournit l'objet `request`)
+requests>=2.31,<3
+pandas>=2.1,<3
+
+Flask
+gunicorn

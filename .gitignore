@@ -1,0 +1,12 @@
+# Secrets — NE JAMAIS committer
+.env
+
+# Fichiers générés par les tests locaux
+bilan_preview.html
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.claude/
