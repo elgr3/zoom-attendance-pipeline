@@ -14,7 +14,6 @@ import hmac
 import json
 import logging
 import os
-import smtplib
 import urllib.parse
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
@@ -428,32 +427,34 @@ def render_html(df, topic, meeting_total_seconds, source):
 # ---------------------------------------------------------------------------
 # 6. Notification email (SMTP)
 # ---------------------------------------------------------------------------
-def send_email(html_body, topic):
-    """Envoie le tableau de bord HTML par email via SMTP (STARTTLS)."""
-    host = _require_env("SMTP_HOST")
-    port = int(os.environ.get("SMTP_PORT", "587"))
-    user = _require_env("SMTP_USER")
-    password = _require_env("SMTP_PASSWORD")
-    sender = os.environ.get("EMAIL_FROM", user)
-    recipients = [x.strip() for x in _require_env("EMAIL_TO").split(",") if x.strip()]
+import os
+import requests
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"📊 Bilan de la réunion : {topic}"
-    msg["From"] = sender
-    msg["To"] = ", ".join(recipients)
-    msg.attach(MIMEText("Votre client email ne supporte pas le HTML.", "plain"))
-    msg.attach(MIMEText(html_body, "html"))
-
-    try:
-        with smtplib.SMTP(host, port, timeout=HTTP_TIMEOUT) as server:
-            server.starttls()
-            server.login(user, password)
-            server.sendmail(sender, recipients, msg.as_string())
-        logger.info("Email envoyé à %s", recipients)
-    except (smtplib.SMTPException, OSError) as exc:
-        logger.error("Échec de l'envoi de l'email : %s", exc)
-        raise
-
+def send_email(html_content, topic):
+    # Récupération de la clé depuis l'environnement Render
+    api_key = os.environ.get("RESEND_API_KEY")
+    url = "https://api.resend.com/emails"
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    # Sur l'offre gratuite, Resend impose d'utiliser cette adresse d'expédition
+    payload = {
+        "from": "onboarding@resend.dev",
+        "to": [os.environ.get("EMAIL_TO")],
+        "subject": f"📊 Bilan de la réunion : {topic}",
+        "html": html_content
+    }
+    
+    response = requests.post(url, json=payload, headers=headers)
+    
+    if response.status_code in (200, 201):
+        print("✅ Email envoyé avec succès via l'API Resend !")
+    else:
+        print(f"❌ Erreur lors de l'envoi de l'email : {response.text}")
+        response.raise_for_status()
 
 # ---------------------------------------------------------------------------
 # Orchestration ETL
