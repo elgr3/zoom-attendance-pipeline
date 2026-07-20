@@ -352,12 +352,30 @@ def _fmt_time(dt):
     return dt.strftime("%d/%m %H:%M:%S")
 
 
+def _fmt_duree(minutes):
+    """
+    Formate une durée exprimée en minutes.
+
+    À partir de 60 min on bascule en heures (« 1h00 », « 1h35 »), sinon on
+    reste en minutes avec une décimale (« 58.0 min »).
+    """
+    if minutes is None or pd.isna(minutes):
+        return "—"
+    if minutes >= 60:
+        heures, reste = divmod(int(round(minutes)), 60)
+        return f"{heures}h{reste:02d}"
+    return f"{minutes:.1f} min"
+
+
 def render_html(df, topic, meeting_total_seconds, source):
     """Transforme le DataFrame en un tableau HTML stylisé (email-friendly)."""
     if df.empty:
         return f"<p>Aucun participant trouvé pour la réunion « {topic} ».</p>"
 
     duree_reunion = round((meeting_total_seconds or 0) / 60, 1)
+    # Somme des temps de connexion de tous les participants (ligne de total).
+    duree_cumulee = float(df["duree_min"].sum())
+    total_sessions = int(df["sessions"].sum())
     rows_html = []
     for _, r in df.iterrows():
         ratio = r["presence_ratio"]
@@ -377,17 +395,13 @@ def render_html(df, topic, meeting_total_seconds, source):
             f"""
             <tr>
               <td style="padding:8px 10px;border-bottom:1px solid #eee;">{r['name'] or '—'}</td>
-              <td style="padding:8px 10px;border-bottom:1px solid #eee;color:#555;">{r['email'] or '—'}</td>
               <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;">{_fmt_time(r['join_time'])}</td>
               <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;">{_fmt_time(r['leave_time'])}</td>
-              <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right;">{r['duree_min']:.1f} min</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right;">{_fmt_duree(r['duree_min'])}</td>
               <td style="padding:8px 10px;border-bottom:1px solid #eee;">
                 <div style="display:flex;align-items:center;gap:6px;">{barre}<span>{ratio:.0f}%</span></div>
               </td>
               <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;">{int(r['sessions'])}</td>
-              <td style="padding:8px 10px;border-bottom:1px solid #eee;color:#555;">{r['leave_reason']}</td>
-              <td style="padding:8px 10px;border-bottom:1px solid #eee;color:#555;">{r['device']}</td>
-              <td style="padding:8px 10px;border-bottom:1px solid #eee;color:#555;">{r['network_type']}</td>
             </tr>"""
         )
 
@@ -397,29 +411,37 @@ def render_html(df, topic, meeting_total_seconds, source):
     <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111;max-width:1000px;">
       <h2 style="margin-bottom:4px;">📊 Bilan de la réunion : {topic}</h2>
       <p style="color:#666;margin-top:0;">
-        {len(df)} participant(s) &middot; durée réunion ~{duree_reunion:.0f} min
+        {len(df)} participant(s) &middot; durée réunion ~{_fmt_duree(duree_reunion)}
         &middot; source : {source_label} &middot; généré le {generated}
       </p>
       <table style="border-collapse:collapse;width:100%;font-size:13px;">
         <thead>
           <tr style="background:#111;color:#fff;text-align:left;">
             <th style="padding:10px;">Participant</th>
-            <th style="padding:10px;">Email</th>
             <th style="padding:10px;text-align:center;">Arrivée</th>
             <th style="padding:10px;text-align:center;">Départ</th>
             <th style="padding:10px;text-align:right;">Durée</th>
             <th style="padding:10px;">Ratio de présence</th>
             <th style="padding:10px;text-align:center;">Sessions</th>
-            <th style="padding:10px;">Dernière déconnexion</th>
-            <th style="padding:10px;">Device</th>
-            <th style="padding:10px;">Réseau</th>
           </tr>
         </thead>
         <tbody>{''.join(rows_html)}</tbody>
+        <tfoot>
+          <tr style="background:#f3f4f6;font-weight:600;">
+            <td style="padding:10px;border-top:2px solid #111;">Total ({len(df)} participants)</td>
+            <td style="padding:10px;border-top:2px solid #111;"></td>
+            <td style="padding:10px;border-top:2px solid #111;"></td>
+            <td style="padding:10px;border-top:2px solid #111;text-align:right;">{_fmt_duree(duree_cumulee)}</td>
+            <td style="padding:10px;border-top:2px solid #111;"></td>
+            <td style="padding:10px;border-top:2px solid #111;text-align:center;">{total_sessions}</td>
+          </tr>
+        </tfoot>
       </table>
       <p style="color:#999;font-size:11px;margin-top:14px;">
+        « Durée » = temps de connexion cumulé du participant, toutes sessions confondues.
         « Sessions » = nombre de connexions distinctes (reconnexions incluses).
-        Ratio de présence = durée cumulée du participant / durée totale de la réunion.
+        Ratio de présence = durée du participant / durée de la réunion.
+        Le total est la somme des temps de connexion de tous les participants.
       </p>
     </div>"""
 
